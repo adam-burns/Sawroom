@@ -135,16 +135,41 @@ ENV DYNESDK=https://sdk.dyne.org:4443/job \
 ADD https://raw.githubusercontent.com/DECODEproject/decode-os/master/docker-sdk/tor.pub.asc tor.pub.asc
 RUN apt-key add tor.pub.asc
 RUN echo "deb https://deb.torproject.org/torproject.org $debian main" > /etc/apt/sources.list.d/tor.list
-RUN apt-get install -y -q golang redis-server redis-tools tor nyx
+RUN wget https://golang.org/dl/go1.15.2.linux-amd64.tar.gz
+RUN tar -C /usr/local -xzf go1.15.2.linux-amd64.tar.gz
+RUN ln -s /usr/local/go/bin/go /usr/bin && ln -s /usr/local/go/bin/gofmt /usr/bin
+RUN apt-get install -y -q redis-server redis-tools tor nyx
 
+RUN go version && go env
+#RUN apt-get install -y -q golang redis-server redis-tools tor nyx
 
 RUN useradd -ms /bin/zsh sawroom
 
 # Configure Tor Controlport auth
-ENV	TORDAM_GIT=github.com/dyne/tor-dam
+ENV	TORDAM_GIT=github.com/adam-burns/tor-dam
 COPY src/torrc /etc/tor/torrc
 RUN torpass=`echo "print(OCTET.random(16):url64())" | zenroom` \
-	&& go get -v -u $TORDAM_GIT/... && cd ~/go/src/github.com/dyne/tor-dam \
+# 	&& export GO111MODULE="on" \
+ 	&& git clone https://${TORDAM_GIT}.git && cd tor-dam \
+ 	&& go mod init ${TORDAM_GIT} \
+        && go mod tidy -v \
+# 	&& cat go.mod \
+#       && sed -e 's/github.com\/parazyd\/tor-dam v0.0.0-20201005200322-573769406a8b/github.com\/parazyd\/tor-dam upgrade/' -i go.mod \
+#       && sed -e 's/github.com\/go-redis\/redis .*/github.com\/go-redis\/redis latest/' -i go.mod \
+#  	&& cat go.mod \
+#       && go get -v -u github.com/go-redis/redis \
+  	&& pwd && ls -la && cat go.mod \
+#  	&& go get -v -u github.com/parazyd/tor-dam \
+        && go build ./... \
+#       && go get -v go.opentelemetry.io/otel@v0.12.0 \
+# 	&& go get -v -u go.opentelemetry.io/otel \
+#  	&& go get -v -u github.com/dgryski/go-rendezvous \
+#       && go get -v -u golang.org/x/crypto/ed25519 \
+#       && go get -v -u golang.org/x/crypto/sha3 \
+#       && go get -v -u golang.org/x/net/proxy \
+#       && go get -v go.opentelemetry.io/otel/api/trace \
+#  	&& export GO111MODULE="" \
+#	&& go get -v $TORDAM_GIT/... && cd ~/go/src/github.com/dyne/tor-dam \
 	&& sed -i python/damhs.py -e "s/topkek/$torpass/" \
 	&& make install && make -C contrib install-init \
     && torpasshash=`HOME=/var/lib/tor setuidgid debian-tor tor --hash-password "$torpass"` \
@@ -154,7 +179,7 @@ RUN torpass=`echo "print(OCTET.random(16):url64())" | zenroom` \
 
 RUN chmod -R go-rwx /etc/tor && chown -R sawroom:sawroom /etc/tor \
 	&& rm -rf /var/lib/tor/data && chown -R sawroom:sawroom /var/lib/tor \
-    && cp /root/go/bin/dam* /usr/bin
+        && find / -name dam\* && cp tor-dam/bin/dam* /usr/bin
 
 RUN chown -R sawroom:sawroom /etc/sawtooth \
 	&& chmod o-rwx /etc/sawtooth/keys
