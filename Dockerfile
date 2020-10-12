@@ -79,8 +79,8 @@ RUN apt-get install -y -q libssl-dev libzmq3-dev torsocks
 
 ## Sawtooth Validator
 RUN cd /project && \
-	wget https://github.com/hyperledger/sawtooth-core/archive/v1.99.0.tar.gz \
-	&& tar xvf v1.99.0.tar.gz && ln -s sawtooth-core-1.99.0 sawtooth-core \
+	wget https://github.com/hyperledger/sawtooth-core/archive/v1.2.5.tar.gz \
+	&& tar xvf v1.2.5.tar.gz && ln -s sawtooth-core-1.2.5 sawtooth-core \
 	&& cd /project/sawtooth-core && ./bin/protogen \
 	&& cd /project/sawtooth-core/validator && cargo build --color never --release
 # Install Sawtooth Validator (rust and python)
@@ -135,41 +135,21 @@ ENV DYNESDK=https://sdk.dyne.org:4443/job \
 ADD https://raw.githubusercontent.com/DECODEproject/decode-os/master/docker-sdk/tor.pub.asc tor.pub.asc
 RUN apt-key add tor.pub.asc
 RUN echo "deb https://deb.torproject.org/torproject.org $debian main" > /etc/apt/sources.list.d/tor.list
-RUN wget https://golang.org/dl/go1.15.2.linux-amd64.tar.gz
-RUN tar -C /usr/local -xzf go1.15.2.linux-amd64.tar.gz
-RUN ln -s /usr/local/go/bin/go /usr/bin && ln -s /usr/local/go/bin/gofmt /usr/bin
 RUN apt-get install -y -q redis-server redis-tools tor nyx
-
-RUN go version && go env
-#RUN apt-get install -y -q golang redis-server redis-tools tor nyx
+RUN wget https://golang.org/dl/go1.15.2.linux-amd64.tar.gz \
+	&& tar -C /usr/local -xzf  go1.15.2.linux-amd64.tar.gz \
+	&& rm go1.15.2.linux-amd64.tar.gz
+ENV PATH=$PATH:/usr/local/go/bin
 
 RUN useradd -ms /bin/zsh sawroom
 
 # Configure Tor Controlport auth
-ENV	TORDAM_GIT=github.com/adam-burns/tor-dam
+ENV	TORDAM_GIT=github.com/dyne/tor-dam
+ENV GOPATH=/usr/local
 COPY src/torrc /etc/tor/torrc
 RUN torpass=`echo "print(OCTET.random(16):url64())" | zenroom` \
-# 	&& export GO111MODULE="on" \
- 	&& git clone https://${TORDAM_GIT}.git && cd tor-dam \
- 	&& go mod init ${TORDAM_GIT} \
-        && go mod tidy -v \
-# 	&& cat go.mod \
-#       && sed -e 's/github.com\/parazyd\/tor-dam v0.0.0-20201005200322-573769406a8b/github.com\/parazyd\/tor-dam upgrade/' -i go.mod \
-#       && sed -e 's/github.com\/go-redis\/redis .*/github.com\/go-redis\/redis latest/' -i go.mod \
-#  	&& cat go.mod \
-#       && go get -v -u github.com/go-redis/redis \
-  	&& pwd && ls -la && cat go.mod \
-#  	&& go get -v -u github.com/parazyd/tor-dam \
-        && go build ./... \
-#       && go get -v go.opentelemetry.io/otel@v0.12.0 \
-# 	&& go get -v -u go.opentelemetry.io/otel \
-#  	&& go get -v -u github.com/dgryski/go-rendezvous \
-#       && go get -v -u golang.org/x/crypto/ed25519 \
-#       && go get -v -u golang.org/x/crypto/sha3 \
-#       && go get -v -u golang.org/x/net/proxy \
-#       && go get -v go.opentelemetry.io/otel/api/trace \
-#  	&& export GO111MODULE="" \
-#	&& go get -v $TORDAM_GIT/... && cd ~/go/src/github.com/dyne/tor-dam \
+    && git clone https://$TORDAM_GIT && cd tor-dam \
+    && go build -o /usr/local/bin ./... \
 	&& sed -i python/damhs.py -e "s/topkek/$torpass/" \
 	&& make install && make -C contrib install-init \
     && torpasshash=`HOME=/var/lib/tor setuidgid debian-tor tor --hash-password "$torpass"` \
@@ -178,8 +158,7 @@ RUN torpass=`echo "print(OCTET.random(16):url64())" | zenroom` \
 	&& sed -e 's/Log notice .*/Log notice file \/var\/log\/tor\/tor.log/' -i /etc/tor/torrc
 
 RUN chmod -R go-rwx /etc/tor && chown -R sawroom:sawroom /etc/tor \
-	&& rm -rf /var/lib/tor/data && chown -R sawroom:sawroom /var/lib/tor \
-        && find / -name dam\* && cp tor-dam/bin/dam* /usr/bin
+	&& rm -rf /var/lib/tor/data && chown -R sawroom:sawroom /var/lib/tor
 
 RUN chown -R sawroom:sawroom /etc/sawtooth \
 	&& chmod o-rwx /etc/sawtooth/keys
